@@ -114,7 +114,12 @@ namespace Common {
     /// Overloaded methods to write different log entry types to the lock free queue.
     /// Creates a LogElement of the correct type and writes it to the lock free queue.
     auto pushValue(const LogElement &log_element) noexcept {
-      *(queue_.getNextToWriteTo()) = log_element;
+      auto *next = queue_.getNextToWriteTo();
+      while (!next) {
+        std::this_thread::yield();
+        next = queue_.getNextToWriteTo();
+      }
+      *next = log_element;
       queue_.updateWriteIndex();
     }
 
