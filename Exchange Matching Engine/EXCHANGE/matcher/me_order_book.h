@@ -15,7 +15,8 @@ namespace Exchange {
 
   class MEOrderBook final {
   public:
-    explicit MEOrderBook(TickerId ticker_id, Logger *logger, MatchingEngine *matching_engine);
+    explicit MEOrderBook(TickerId ticker_id, Logger *logger, MatchingEngine *matching_engine,
+                         size_t order_capacity = ME_MAX_ORDER_IDS);
 
     ~MEOrderBook();
 
@@ -56,7 +57,7 @@ namespace Exchange {
     MEOrdersAtPrice *asks_by_price_ = nullptr;
 
     /// Hash map from Price -> MEOrdersAtPrice.
-    OrdersAtPriceHashMap price_orders_at_price_;
+    OrdersAtPriceHashMap price_orders_at_price_{};
 
     /// Memory pool to manage MEOrder objects.
     MemPool<MEOrder> order_pool_;
@@ -202,7 +203,7 @@ namespace Exchange {
         order->prev_order_ = order->next_order_ = nullptr;
       }
 
-      cid_oid_to_order_.at(order->client_id_).at(order->client_order_id_) = nullptr;
+      cid_oid_to_order_.erase({order->client_id_, order->client_order_id_});
       order_pool_.deallocate(order);
     }
 
@@ -224,7 +225,7 @@ namespace Exchange {
         first_order->prev_order_ = order;
       }
 
-      cid_oid_to_order_.at(order->client_id_).at(order->client_order_id_) = order;
+      cid_oid_to_order_.insert_or_assign({order->client_id_, order->client_order_id_}, order);
     }
   };
 

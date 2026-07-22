@@ -19,14 +19,15 @@ namespace Common {
 
     auto getNextToWriteTo() noexcept -> T* {
       auto current_write = write_pos_.load(std::memory_order_relaxed);
-      auto next_write = (current_write + 1) & (store_.size() - 1); // Fast modulo for power of 2
+      const auto mask = store_.size() - 1;
+      auto next_write = (current_write + 1) & mask; // Fast modulo for power of 2
       
       // Check if queue is full
-      if (next_write == read_pos_.load(std::memory_order_acquire)) {
+      if (next_write == (read_pos_.load(std::memory_order_acquire) & mask)) {
         return nullptr; // Queue full
       }
       
-      return &store_[current_write];
+      return &store_[current_write & mask];
     }
 
     auto updateWriteIndex() noexcept -> bool {
@@ -41,7 +42,7 @@ namespace Common {
         return nullptr; // Queue empty
       }
       
-      return &store_[current_read];
+      return &store_[current_read & (store_.size() - 1)];
     }
 
     auto updateReadIndex() noexcept -> bool {

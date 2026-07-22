@@ -56,6 +56,28 @@ cmake --build build-debug --parallel
 
 The executables are written to the selected build directory as `exchange_main` and `trading_main`.
 
+## Test
+
+Deterministic matching tests cover full and partial fills, FIFO priority, best-price priority, cancellation, and cancel rejection:
+
+```bash
+cmake -S . -B build-debug -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+cmake --build build-debug --parallel
+ctest --test-dir build-debug --output-on-failure
+```
+
+GitHub Actions runs the tests in both Release and sanitizer-enabled Debug configurations on every push and pull request.
+
+## Benchmark
+
+The benchmark measures synchronous `MatchingEngine::processClientRequest(NEW)` calls and prints machine-readable JSON containing the boundary, compiler, kernel, architecture, warmup/sample counts, and latency percentiles:
+
+```bash
+./build/matching_engine_benchmark 10000 1000 > benchmark.json
+```
+
+This boundary includes the engine's current instrumentation and logging work. It excludes TCP/UDP transport and is not an end-to-end latency measurement.
+
 ## Run
 
 Start the exchange first:
@@ -115,6 +137,11 @@ These values are currently compile-time constants in the two program entry point
 `-- METRICS.json            historical run metadata
 ```
 
+Additional engineering documentation:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): thread ownership, order lifecycle, ordering guarantees, allocation, overload, and recovery boundaries
+- [`docs/PROTOCOL.md`](docs/PROTOCOL.md): current packed wire structures and their portability limitations
+
 ## Performance Notes
 
 Release builds enable aggressive native-CPU optimizations, including LTO, `-march=native`, and `-ffast-math`. Consequently, a release binary may not run on a different CPU and floating-point behavior may differ from strict IEEE semantics.
@@ -126,9 +153,9 @@ For meaningful measurements, build and run on the same isolated Linux host, pin 
 - Linux-specific socket APIs and optional CPU affinity
 - Fixed network addresses, ports, and instrument count
 - No persistence, authentication, encrypted transport, or recovery journal
-- No automated test suite yet
-- Historical benchmark data has no checked-in benchmark harness or environment manifest
+- Queue-full handling is not yet graceful in every producer
+- The wire format is host-endian and ABI-dependent
 
 ## License
 
-No license file is currently included. Unless a license is added, copyright law reserves reuse and redistribution rights to the repository owner.
+Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Sam Zhong.

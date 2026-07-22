@@ -5,9 +5,10 @@
 #include "matching_engine.h"
 
 namespace Exchange {
-  MEOrderBook::MEOrderBook(TickerId ticker_id, Logger *logger, MatchingEngine *matching_engine)
-      : ticker_id_(ticker_id), matching_engine_(matching_engine), orders_at_price_pool_(ME_MAX_PRICE_LEVELS), order_pool_(ME_MAX_ORDER_IDS),
+  MEOrderBook::MEOrderBook(TickerId ticker_id, Logger *logger, MatchingEngine *matching_engine, size_t order_capacity)
+      : ticker_id_(ticker_id), matching_engine_(matching_engine), orders_at_price_pool_(ME_MAX_PRICE_LEVELS), order_pool_(order_capacity),
         logger_(logger) {
+    cid_oid_to_order_.reserve(order_capacity);
   }
 
   MEOrderBook::~MEOrderBook() {
@@ -16,9 +17,7 @@ namespace Exchange {
 
     matching_engine_ = nullptr;
     bids_by_price_ = asks_by_price_ = nullptr;
-    for (auto &itr: cid_oid_to_order_) {
-      itr.fill(nullptr);
-    }
+    cid_oid_to_order_.clear();
   }
 
   /// Match a new aggressive order with the provided parameters against a passive order held in the bid_itr object and generate client responses and market updates for the match.
@@ -81,15 +80,6 @@ namespace Exchange {
         match(ticker_id, client_id, side, client_order_id, new_market_order_id, ask_itr, &leaves_qty);
         END_LATENCY_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         
-        // If this price level is empty, move to next level
-        if (!asks_by_price_->first_me_order_) {
-          auto next_ask = asks_by_price_->next_entry_;
-          if (next_ask == asks_by_price_) {
-            asks_by_price_ = nullptr; // No more ask levels
-          } else {
-            asks_by_price_ = next_ask;
-          }
-        }
       }
     } else if (side == Side::SELL) {
       // SELL order matches against BID orders (buy orders)
@@ -109,15 +99,6 @@ namespace Exchange {
         match(ticker_id, client_id, side, client_order_id, new_market_order_id, bid_itr, &leaves_qty);
         END_LATENCY_MEASURE(Exchange_MEOrderBook_match, (*logger_));
         
-        // If this price level is empty, move to next level
-        if (!bids_by_price_->first_me_order_) {
-          auto next_bid = bids_by_price_->next_entry_;
-          if (next_bid == bids_by_price_) {
-            bids_by_price_ = nullptr; // No more bid levels
-          } else {
-            bids_by_price_ = next_bid;
-          }
-        }
       }
     }
 
@@ -151,13 +132,9 @@ namespace Exchange {
 
   /// Attempt to cancel an order in the order book, issue a cancel-rejection if order does not exist.
   auto MEOrderBook::cancel(ClientId client_id, OrderId order_id, TickerId ticker_id) noexcept -> void {
-    auto is_cancelable = (client_id < cid_oid_to_order_.size());
-    MEOrder *exchange_order = nullptr;
-    if (LIKELY(is_cancelable)) {
-      auto &co_itr = cid_oid_to_order_.at(client_id);
-      exchange_order = co_itr.at(order_id);
-      is_cancelable = (exchange_order != nullptr);
-    }
+    const auto order_itr = cid_oid_to_order_.find({client_id, order_id});
+    const auto is_cancelable = order_itr != cid_oid_to_order_.end();
+    MEOrder *exchange_order = is_cancelable ? order_itr->second : nullptr;
 
     if (UNLIKELY(!is_cancelable)) {
       client_response_ = {ClientResponseType::CANCEL_REJECTED, client_id, ticker_id, order_id, OrderId_INVALID,

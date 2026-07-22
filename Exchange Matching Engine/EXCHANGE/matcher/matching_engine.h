@@ -19,7 +19,9 @@ namespace Exchange {
   public:
     MatchingEngine(ClientRequestLFQueue *client_requests,
                    ClientResponseLFQueue *client_responses,
-                   MEMarketUpdateLFQueue *market_updates);
+                   MEMarketUpdateLFQueue *market_updates,
+                   size_t order_capacity = ME_MAX_ORDER_IDS,
+                   size_t log_queue_size = Common::LOG_QUEUE_SIZE);
 
     ~MatchingEngine();
 
